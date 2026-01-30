@@ -90,10 +90,10 @@ public:
 	bool InLoop() {
 		return !active_loops.empty();
 	}
-	void ExecuteCommand(unique_ptr<Command> command);
+	virtual void ExecuteCommand(unique_ptr<Command> command);
 	void Reconnect();
-	void StartLoop(LoopDefinition loop);
-	void EndLoop();
+	virtual void StartLoop(LoopDefinition loop);
+	virtual void EndLoop();
 	string ReplaceLoopIterator(string text, string loop_iterator_name, string replacement);
 	string LoopReplacement(string text, const vector<LoopDefinition> &loops);
 	bool ForEachTokenReplace(const string &parameter, vector<string> &result);
