@@ -22,6 +22,10 @@ unique_ptr<SQLStatement> PEGTransformerFactory::TransformInsertStatement(PEGTran
 	transformer.TransformOptional<InsertColumnOrder>(list_pr, 5, result->column_order);
 	transformer.TransformOptional<vector<string>>(list_pr, 6, result->columns);
 	auto insert_values = transformer.Transform<InsertValues>(list_pr.Child<ListParseResult>(7));
+	if (!result->columns.empty() && insert_values.default_values) {
+		throw ParserException(
+		    "You can not provide both a column list and DEFAULT VALUES, please remove one of the two");
+	}
 	if (insert_values.default_values) {
 		result->default_values = true;
 	}
@@ -140,13 +144,13 @@ InsertValues PEGTransformerFactory::TransformInsertValues(PEGTransformer &transf
 		result.default_values = true;
 		result.select_statement = nullptr;
 		return result;
-	} else if (choice_pr.result->name == "SelectStatementInternal") {
+	}
+	if (choice_pr.result->name == "SelectStatementInternal") {
 		result.default_values = false;
 		result.select_statement = transformer.Transform<unique_ptr<SelectStatement>>(choice_pr.result);
 		return result;
-	} else {
-		throw InternalException("Unexpected choice in InsertValues statement.");
 	}
+	throw InternalException("Unexpected choice in InsertValues statement.");
 }
 
 InsertColumnOrder PEGTransformerFactory::TransformByNameOrPosition(PEGTransformer &transformer,

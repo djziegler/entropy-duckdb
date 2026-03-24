@@ -142,12 +142,10 @@ public:
 	                                                  const string &table_name);
 	//! Get the table info of a specific table, or nullptr if it cannot be found. Uses INVALID_CATALOG.
 	DUCKDB_API unique_ptr<TableDescription> TableInfo(const string &schema_name, const string &table_name);
-	//! Execute a query with the given collection "attached" to the query using a CTE
-	DUCKDB_API void Append(ColumnDataCollection &collection, const string &query, const vector<string> &column_names,
-	                       const string &collection_name);
-	//! Appends a DataChunk and its default columns to the specified table.
-	DUCKDB_API void Append(TableDescription &description, ColumnDataCollection &collection,
-	                       optional_ptr<const vector<LogicalIndex>> column_ids = nullptr);
+	//! Executes a query with the given collection "attached" to the query using a CTE.
+	DUCKDB_API void Append(unique_ptr<SQLStatement> stmt);
+	//! Appends a ColumnDataCollection to the described table.
+	DUCKDB_API void Append(TableDescription &description, ColumnDataCollection &collection);
 
 	//! Try to bind a relation in the current client context; either throws an exception or fills the result_columns
 	//! list with the set of returned columns
@@ -194,7 +192,7 @@ public:
 
 	//! Extract the logical plan of a query
 	DUCKDB_API unique_ptr<LogicalOperator> ExtractPlan(const string &query);
-	DUCKDB_API void HandlePragmaStatements(vector<unique_ptr<SQLStatement>> &statements);
+	DUCKDB_API void PreprocessStatements(vector<unique_ptr<SQLStatement>> &statements);
 
 	//! Runs a function with a valid transaction context, potentially starting a transaction if the context is in auto
 	//! commit mode.
@@ -238,6 +236,8 @@ public:
 
 	//! Process an error for display to the user
 	DUCKDB_API void ProcessError(ErrorData &error, const string &query) const;
+
+	DUCKDB_API LogicalType ParseLogicalType(const string &type);
 
 private:
 	//! Parse statements and resolve pragmas from a query
@@ -316,6 +316,8 @@ private:
 	shared_ptr<PreparedStatementData> CreatePreparedStatementInternal(ClientContextLock &lock, const string &query,
 	                                                                  unique_ptr<SQLStatement> statement,
 	                                                                  PendingQueryParameters parameters);
+
+	bool ErrorInvalidatesTransaction(ExceptionType type);
 
 private:
 	//! Lock on using the ClientContext in parallel

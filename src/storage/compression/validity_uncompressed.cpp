@@ -224,10 +224,6 @@ void ValidityUncompressed::UnalignedScan(data_ptr_t input, idx_t input_size, idx
 	auto input_data = reinterpret_cast<validity_t *>(input);
 
 #ifdef DEBUG
-	// this method relies on all the bits we are going to write to being set to valid
-	for (idx_t i = 0; i < scan_count; i++) {
-		D_ASSERT(result_mask.RowIsValid(result_offset + i));
-	}
 	// save boundary entries to verify we don't corrupt surrounding bits later.
 	idx_t debug_first_entry = result_offset / ValidityMask::BITS_PER_VALUE;
 	idx_t debug_last_entry = (result_offset + scan_count - 1) / ValidityMask::BITS_PER_VALUE;
@@ -236,14 +232,26 @@ void ValidityUncompressed::UnalignedScan(data_ptr_t input, idx_t input_size, idx
 	    debug_result_data ? debug_result_data[debug_first_entry] : ValidityMask::ValidityBuffer::MAX_ENTRY;
 	validity_t debug_original_last_entry =
 	    debug_result_data ? debug_result_data[debug_last_entry] : ValidityMask::ValidityBuffer::MAX_ENTRY;
+
+	// save original result validity for in-range verification (usually this function is meant to be called
+	// with all result bits set to valid, but in some instances, the result bits may be invalid, in which case,
+	// the result bits should remain invalid, i.e. we do not copy over the input bit.
+	ValidityMask debug_original_result(scan_count);
+	if (debug_result_data) {
+		for (idx_t i = 0; i < scan_count; i++) {
+			if (!result_mask.RowIsValid(result_offset + i)) {
+				debug_original_result.SetInvalid(i);
+			}
+		}
+	}
 #endif
 
 #if STANDARD_VECTOR_SIZE < 128
 	// fallback for tiny vector sizes
 	// the bitwise ops we use below don't work if the vector size is too small
-	ValidityMask source_mask(input_data, input_size);
+	ValidityMask source_mask128(input_data, input_size);
 	for (idx_t i = 0; i < scan_count; i++) {
-		if (!source_mask.RowIsValid(input_start + i)) {
+		if (!source_mask128.RowIsValid(input_start + i)) {
 			if (result_mask.AllValid()) {
 				result_mask.Initialize();
 			}
@@ -266,17 +274,14 @@ void ValidityUncompressed::UnalignedScan(data_ptr_t input, idx_t input_size, idx
 	// Window scanning algorithm -- the goal is to copy a contiguous sequence of bits from input into result,
 	// and to do this using bit operations on 64 bit fields.
 	//
-	// On each loop iteration, we are inspecting a 64 bit field in both the input and result, starting at a certain
-	// index (in the code, these are denoted by input(result)_entry and input(result)_index, respectively.
+	// The algorithm is simply explained with the diagram below: each loop iteration is numbered, and within each
+	// iteration we are copying the numbered window from the input to the corresponding window in the result.
 	//
-	// For example, on the first loop iteration for the diagram, both entries are entry 0, and the starting indexes are
-	// the index of window 1 in each entry.
+	// input_entry and result_entry are the 64 bit entries, i.e. on any given loop iteration we only want to be
+	// performing bit operations on 64 bit entries.
 	//
-	// input(result)_window is the window from input(result)_index to the end of either the current bit field, or
-	// the end of the range of bits we are trying to copy if that is contained within the current entry.
-	//
-	// window is minimum(input_window, result_window), which is window 1 on the first iteration, window 2 on the
-	// second iteration, etc. These are what are shown in the diagram below.
+	// input_index and result_index are the current offset within each entry. We can calculate the current window size
+	// as the minimum between the remaining bits to process in each entry.
 	//
 	// INPUT:
 	//  0                             63|                              127|                            191
@@ -315,8 +320,8 @@ void ValidityUncompressed::UnalignedScan(data_ptr_t input, idx_t input_size, idx
 		// the smaller of the two is our next window to copy from input to result.
 		idx_t window_size = MinValue(input_window_size, result_window_size);
 
-		// Now within each loop iteration, we can think of the general case that handles all scenarios as just
-		// copying the window from the starting index in input to the window in the starting index of result.
+		// Within each loop iteration, copy the window from the starting index in input over to the starting index
+		// of result, without corrupting surrounding bits in the result entry.
 
 		// First, line up the windows:
 		if (result_idx < input_idx) {
@@ -397,11 +402,15 @@ void ValidityUncompressed::UnalignedScan(data_ptr_t input, idx_t input_size, idx
 #endif
 
 #ifdef DEBUG
-	// verify that we actually accomplished the bitwise ops equivalent that we wanted to do
-	ValidityMask input_mask(input_data, input_size);
+	// verify in-range bits.
+	ValidityMask source_mask(input_data, input_size);
 	for (idx_t i = 0; i < scan_count; i++) {
-		D_ASSERT(result_mask.RowIsValid(result_offset + i) == input_mask.RowIsValid(input_start + i));
+		bool original_valid = debug_original_result.RowIsValid(i);
+		bool input_valid = source_mask.RowIsValid(input_start + i);
+		bool result_valid = result_mask.RowIsValid(result_offset + i);
+		D_ASSERT(result_valid == (original_valid && input_valid));
 	}
+
 	// verify surrounding bits weren't modified
 	auto debug_final_result_data = (validity_t *)result_mask.GetData();
 	validity_t debug_final_first_entry =

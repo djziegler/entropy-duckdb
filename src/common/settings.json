@@ -84,6 +84,13 @@
         ]
     },
     {
+        "name": "allowed_configs",
+        "description": "List of configuration options that are ALWAYS allowed to be changed - even when lock_configuration is true",
+        "type": "VARCHAR[]",
+        "scope": "global",
+        "custom_implementation": true
+    },
+    {
         "name": "allowed_directories",
         "description": "List of directories/prefixes that are ALWAYS allowed to be queried - even when enable_external_access is false",
         "type": "VARCHAR[]",
@@ -132,6 +139,13 @@
         "type": "UBIGINT",
         "default_scope": "local",
         "default_value": "64"
+    },
+    {
+        "name": "auto_checkpoint_skip_wal_threshold",
+        "description": "The estimated WAL write size at which point we will skip writing to the WAL and only checkpoint. Skipping writing to the WAL means concurrent commits are blocked while the checkpoint is happening.",
+        "type": "UBIGINT",
+        "default_scope": "global",
+        "default_value": "100000"
     },
     {
         "name": "autoinstall_extension_repository",
@@ -194,19 +208,34 @@
         ]
     },
     {
+        "name": "configure_profiling",
+        "description": "Accepts a JSON enabling custom metrics",
+        "type": "VARCHAR",
+        "scope": "local",
+        "custom_implementation": true,
+        "aliases": [
+            "custom_profiling_settings",
+            "configure_metrics"
+        ]
+    },
+    {
+        "name": "current_transaction_invalidation_policy",
+        "description": "Which types of exceptions invalidate the database for the current transaction",
+        "type": "VARCHAR",
+        "scope": "global",
+        "custom_implementation": true,
+        "default_value": "STANDARD_POLICY",
+        "on_callbacks": [
+            "set"
+        ]
+    },
+    {
         "name": "custom_extension_repository",
         "description": "Overrides the custom endpoint for remote extension installation",
         "type": "VARCHAR",
         "internal_setting": "custom_extension_repo",
         "scope": "global",
         "default_value": ""
-    },
-    {
-        "name": "custom_profiling_settings",
-        "description": "Accepts a JSON enabling custom metrics",
-        "type": "VARCHAR",
-        "scope": "local",
-        "custom_implementation": true
     },
     {
         "name": "custom_user_agent",
@@ -237,6 +266,13 @@
         "description": "DEBUG SETTING: time to sleep before a checkpoint",
         "type": "UBIGINT",
         "default_scope": "global",
+        "default_value": "0"
+    },
+    {
+        "name": "debug_eviction_queue_sleep_micro_seconds",
+        "description": "DEBUG SETTING: time for the eviction queue to sleep before acquiring shared ownership of block memory",
+        "type": "UBIGINT",
+        "scope": "global",
         "default_value": "0"
     },
     {
@@ -337,6 +373,13 @@
         "type": "VARCHAR",
         "scope": "global",
         "custom_implementation": true
+    },
+    {
+        "name": "deprecated_using_key_syntax",
+        "description": "Configures the use of the deprecated union syntax for USING KEY CTEs.",
+        "type": "ENUM<DeprecatedUsingKeySyntax>",
+        "default_scope": "local",
+        "default_value": "DEFAULT"
     },
     {
         "name": "disable_database_invalidation",
@@ -578,6 +621,13 @@
         ]
     },
     {
+        "name": "force_mbedtls_unsafe",
+        "description": "Enable mbedtls for encryption (WARNING: unsafe to use)",
+        "type": "BOOLEAN",
+        "scope": "global",
+        "custom_implementation": true
+    },
+    {
         "name": "force_variant_shredding",
         "description": "Forces the VARIANT shredding that happens at checkpoint to use the provided schema for the shredding.",
         "type": "VARCHAR",
@@ -643,6 +693,13 @@
         "default_value": "true"
     },
     {
+        "name": "ignore_unknown_crs",
+        "description": "Ignore unknown Coordinate Reference Systems (CRS) when creating geometry types or importing geospatial data.",
+        "type": "BOOLEAN",
+        "default_scope": "local",
+        "default_value": "false"
+    },
+    {
         "name": "immediate_transaction_mode",
         "description": "Whether transactions should be started lazily when needed, or immediately when BEGIN TRANSACTION is called",
         "type": "BOOLEAN",
@@ -689,7 +746,7 @@
     },
     {
         "name": "lock_configuration",
-        "description": "Whether or not the configuration can be altered",
+        "description": "Whether or not configurations can be altered",
         "type": "BOOLEAN",
         "scope": "global",
         "default_value": "false"
@@ -786,6 +843,13 @@
         "type": "BOOLEAN",
         "default_scope": "global",
         "default_value": "false"
+    },
+    {
+        "name": "operator_memory_limit",
+        "description": "The maximum memory for query intermediates (sorts, hash tables) per connection (e.g. 256MB)",
+        "type": "VARCHAR",
+        "scope": "local",
+        "custom_implementation": true
     },
     {
         "name": "order_by_non_integer_literal",
@@ -1024,6 +1088,23 @@
         "type": "BIGINT",
         "scope": "global",
         "default_value": "30000"
+    },
+    {
+        "name": "wal_autocheckpoint_entries",
+        "description": "Trigger automatic checkpoint when WAL entry count reaches or exceeds N (0 = disabled)",
+        "type": "UBIGINT",
+        "default_scope": "global",
+        "default_value": "0"
+    },
+    {
+        "name": "warnings_as_errors",
+        "description": "Escalate all warnings to errors.",
+        "type": "BOOLEAN",
+        "scope": "global",
+        "default_value": "false",
+        "on_callbacks": [
+            "set"
+        ]
     },
     {
         "name": "write_buffer_row_group_count",

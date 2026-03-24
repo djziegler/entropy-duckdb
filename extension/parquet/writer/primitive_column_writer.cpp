@@ -144,7 +144,7 @@ void PrimitiveColumnWriter::WriteLevels(Allocator &allocator, WriteStream &temp_
 	}
 
 	// write the levels using the RLE-BP encoding
-	const auto bit_width = RleBpDecoder::ComputeBitWidth((max_value));
+	const auto bit_width = RleBpDecoder::ComputeBitWidthFromMaxValue(max_value);
 	RleBpEncoder rle_encoder(bit_width);
 
 	// have to write to an intermediate stream first because we need to know the size
@@ -264,11 +264,11 @@ void PrimitiveColumnWriter::SetParquetStatistics(PrimitiveColumnWriterState &sta
 	if (!state.stats_state) {
 		return;
 	}
-	if (MaxRepeat() == 0) {
-		column_chunk.meta_data.statistics.null_count = NumericCast<int64_t>(state.null_count);
-		column_chunk.meta_data.statistics.__isset.null_count = true;
-		column_chunk.meta_data.__isset.statistics = true;
-	}
+	auto null_count = MaxRepeat() == 0 ? state.null_count : state.null_count + state.parent_null_count;
+	column_chunk.meta_data.statistics.null_count = NumericCast<int64_t>(null_count);
+	column_chunk.meta_data.statistics.__isset.null_count = true;
+	column_chunk.meta_data.__isset.statistics = true;
+
 	// if we have NaN values - don't write the min/max here
 	if (!state.stats_state->HasNaN()) {
 		// set min/max/min_value/max_value
@@ -321,7 +321,7 @@ void PrimitiveColumnWriter::SetParquetStatistics(PrimitiveColumnWriterState &sta
 		}
 		if (has_json_stats) {
 			// Add the geospatial statistics to the extra GeoParquet metadata
-			writer.GetGeoParquetData().AddGeoParquetStats(column_schema.name, column_schema.type,
+			writer.GetGeoParquetData().AddGeoParquetStats(writer.GetContext(), column_schema.name, column_schema.type,
 			                                              *state.stats_state->GetGeoStats(), gpq_version);
 		}
 	}
@@ -382,7 +382,6 @@ void PrimitiveColumnWriter::FinalizeWrite(ColumnWriterState &state_p) {
 	if (state.bloom_filter) {
 		writer.BufferBloomFilter(state.col_idx, std::move(state.bloom_filter));
 	}
-
 	// finalize the stats
 	writer.FlushColumnStats(state.col_idx, column_chunk, state.stats_state.get());
 }
@@ -444,7 +443,7 @@ idx_t PrimitiveColumnWriter::FinalizeSchema(vector<duckdb_parquet::SchemaElement
 	auto allow_geometry = schema.allow_geometry;
 
 	duckdb_parquet::SchemaElement schema_element;
-	schema_element.type = ParquetWriter::DuckDBTypeToParquetType(type);
+	schema_element.type = ParquetWriter::DuckDBTypeToParquetType(type, writer.WriteTimestampAsInt96());
 	schema_element.repetition_type = repetition_type;
 	schema_element.__isset.num_children = false;
 	schema_element.__isset.type = true;
@@ -454,7 +453,8 @@ idx_t PrimitiveColumnWriter::FinalizeSchema(vector<duckdb_parquet::SchemaElement
 		schema_element.__isset.field_id = true;
 		schema_element.field_id = field_id.GetIndex();
 	}
-	ParquetWriter::SetSchemaProperties(type, schema_element, allow_geometry);
+	ParquetWriter::SetSchemaProperties(type, schema_element, allow_geometry, writer.GetContext(),
+	                                   writer.WriteTimestampAsInt96(), writer.TimestampIsAdjustedToUTC());
 	schemas.push_back(std::move(schema_element));
 
 	D_ASSERT(child_writers.empty());

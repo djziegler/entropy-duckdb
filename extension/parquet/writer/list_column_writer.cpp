@@ -1,3 +1,4 @@
+#include "duckdb/common/vector/list_vector.hpp"
 #include "writer/list_column_writer.hpp"
 
 namespace duckdb {
@@ -142,6 +143,11 @@ void ListColumnWriter::FinalizeWrite(ColumnWriterState &state_p) {
 }
 
 ColumnWriter &ListColumnWriter::GetChildWriter() {
+	D_ASSERT(child_writers.size() == 1);
+	return *child_writers[0];
+}
+
+const ColumnWriter &ListColumnWriter::GetChildWriter() const {
 	D_ASSERT(child_writers.size() == 1);
 	return *child_writers[0];
 }
